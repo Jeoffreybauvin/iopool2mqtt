@@ -120,6 +120,74 @@ async fn test_end_to_end_wiremock_to_mqtt_topics() {
 }
 
 #[tokio::test]
+async fn test_end_to_end_wiremock_to_mqtt_topics_with_pool_title() {
+    let mock_server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/v1/pools"))
+        .and(header("x-api-key", "integration-test-key"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_raw(REALISTIC_POOLS_JSON, "application/json"),
+        )
+        .mount(&mock_server)
+        .await;
+
+    let api_url = format!("{}/v1", mock_server.uri());
+    let mut env = HashMap::new();
+    env.insert("IOPOOL_API_KEY", "integration-test-key");
+    env.insert("IOPOOL_API_URL", api_url.as_str());
+    env.insert("MQTT_BASE_TOPIC", "iopool2mqtt");
+    env.insert("MQTT_USE_POOL_TITLE", "true");
+    env.insert("HA_DISCOVERY_ENABLED", "true");
+    env.insert("HA_DISCOVERY_PREFIX", "homeassistant");
+    env.insert("RUN_ONCE", "true");
+
+    let config = Config::from_map(&env).unwrap();
+    let api_client = IopoolClient::from_config(&config).unwrap();
+    let publisher = SharedMemoryPublisher::default();
+    let recorded = Arc::clone(&publisher.messages);
+
+    let mut bridge = Bridge::new(config, api_client, publisher);
+    let (_tx, rx) = watch::channel(false);
+    bridge.run(rx).await.unwrap();
+
+    let published = recorded.lock().unwrap().clone();
+    let by_topic: HashMap<String, String> = published
+        .into_iter()
+        .map(|m| (m.topic, m.payload))
+        .collect();
+
+    assert!(by_topic.contains_key("iopool2mqtt/pools"));
+    assert!(by_topic.contains_key("iopool2mqtt/Piscine/state"));
+    assert_eq!(
+        by_topic
+            .get("iopool2mqtt/Piscine/title")
+            .map(String::as_str),
+        Some("Piscine")
+    );
+    assert_eq!(
+        by_topic
+            .get("iopool2mqtt/Piscine/latestMeasure/orp")
+            .map(String::as_str),
+        Some("741")
+    );
+    assert_eq!(
+        by_topic
+            .get("iopool2mqtt/Piscine/advice/filtrationDuration")
+            .map(String::as_str),
+        Some("2")
+    );
+    let ha_temp = by_topic
+        .get("homeassistant/sensor/iopool_Piscine_temperature/config")
+        .expect("missing HA discovery config for Piscine temperature");
+    assert!(ha_temp.contains("\"name\":\"Piscine Temperature\""));
+    assert!(ha_temp.contains("\"state_topic\":\"iopool2mqtt/Piscine/state\""));
+    assert!(
+        by_topic.contains_key("homeassistant/binary_sensor/iopool_Piscine_action_required/config")
+    );
+}
+
+#[tokio::test]
 async fn test_end_to_end_live_mqtt_broker_if_configured() {
     let Ok(mqtt_host) = std::env::var("TEST_MQTT_HOST") else {
         // Skip when no live MQTT broker is configured for this test run
@@ -199,6 +267,35 @@ async fn test_end_to_end_live_mqtt_broker_if_configured() {
     assert_eq!(
         received
             .get("iopool2mqtt_e2e/cfd5a936-e8e6-4ad3-b985-512bee0d9ad9/latestMeasure/orp")
+            .map(String::as_str),
+        Some("741")
+    );
+
+    // Also test with MQTT_USE_POOL_TITLE=true against the live broker
+    env.insert("MQTT_USE_POOL_TITLE", "true");
+    let config_title = Config::from_map(&env).unwrap();
+    let api_client_title = IopoolClient::from_config(&config_title).unwrap();
+    let publisher_title = RumqttcPublisher::connect(&config_title).await.unwrap();
+    let mut bridge_title = Bridge::new(config_title, api_client_title, publisher_title);
+    let (_tx2, rx2) = watch::channel(false);
+    bridge_title.run(rx2).await.unwrap();
+
+    let _ = tokio::time::timeout(Duration::from_secs(3), async {
+        loop {
+            if let Ok(Event::Incoming(Packet::Publish(p))) = sub_eventloop.poll().await {
+                let payload = String::from_utf8_lossy(&p.payload).into_owned();
+                received.insert(p.topic, payload);
+                if received.contains_key("iopool2mqtt_e2e/Piscine/latestMeasure/orp") {
+                    break;
+                }
+            }
+        }
+    })
+    .await;
+
+    assert_eq!(
+        received
+            .get("iopool2mqtt_e2e/Piscine/latestMeasure/orp")
             .map(String::as_str),
         Some("741")
     );

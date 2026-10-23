@@ -247,6 +247,11 @@ pub fn sanitize_id(raw: &str) -> String {
 
 /// Builds all Home Assistant MQTT Auto-Discovery messages for a given [`Pool`].
 ///
+/// When `use_pool_title` is `true`:
+/// - `state_topic` uses `<mqtt_base_topic>/<pool_title>/state`
+/// - Each sensor's display `name` is prefixed with the pool title (e.g. `"Piscine Temperature"`)
+/// - Each sensor's `object_id` and discovery topic use `iopool_<pool_title>_<metric>`
+///
 /// Discovery messages are always marked with `retain = true` so Home Assistant discovers
 /// the entities even after a Home Assistant restart.
 ///
@@ -257,9 +262,12 @@ pub fn build_ha_discovery_messages(
     pool: &Pool,
     mqtt_base_topic: &str,
     ha_discovery_prefix: &str,
+    use_pool_title: bool,
 ) -> Result<Vec<MqttMessage>> {
+    let topic_segment = pool.topic_segment(use_pool_title);
+    let safe_node_id = sanitize_id(&topic_segment);
     let safe_pool_id = sanitize_id(&pool.id);
-    let state_topic = format!("{mqtt_base_topic}/{}/state", pool.id);
+    let state_topic = format!("{mqtt_base_topic}/{topic_segment}/state");
     let availability_topic = format!("{mqtt_base_topic}/bridge/state");
 
     let eco_id = pool.latest_measure.as_ref().and_then(|m| m.eco_id.clone());
@@ -278,18 +286,26 @@ pub fn build_ha_discovery_messages(
     };
 
     let mut messages = Vec::with_capacity(ENTITY_SPECS.len());
+    let trimmed_title = pool.title.trim();
 
     for spec in ENTITY_SPECS {
         let unique_id = format!("iopool_{safe_pool_id}_{}", spec.key);
+        let object_id = format!("iopool_{safe_node_id}_{}", spec.key);
         let discovery_topic = format!(
-            "{ha_discovery_prefix}/{}/{unique_id}/config",
+            "{ha_discovery_prefix}/{}/{object_id}/config",
             spec.component
         );
 
+        let entity_name = if use_pool_title && !trimmed_title.is_empty() {
+            format!("{trimmed_title} {}", spec.name)
+        } else {
+            spec.name.to_owned()
+        };
+
         let payload_struct = HaDiscoveryPayload {
-            name: spec.name.to_owned(),
-            unique_id: unique_id.clone(),
-            object_id: unique_id,
+            name: entity_name,
+            unique_id,
+            object_id,
             state_topic: state_topic.clone(),
             value_template: spec.value_template.to_owned(),
             availability_topic: availability_topic.clone(),
@@ -337,7 +353,8 @@ mod tests {
             "advice": { "filtrationDuration": 4 }
         }"#;
         let pool: Pool = serde_json::from_str(raw).unwrap();
-        let msgs = build_ha_discovery_messages(&pool, "iopool2mqtt", "homeassistant").unwrap();
+        let msgs =
+            build_ha_discovery_messages(&pool, "iopool2mqtt", "homeassistant", false).unwrap();
 
         assert_eq!(msgs.len(), ENTITY_SPECS.len());
         assert!(msgs.iter().all(|m| m.retain));
@@ -352,6 +369,11 @@ mod tests {
         );
 
         let parsed: Value = serde_json::from_str(&temp_msg.payload).unwrap();
+        assert_eq!(parsed["name"], "Temperature");
+        assert_eq!(
+            parsed["object_id"],
+            "iopool_cfd5a936-e8e6-4ad3-b985-512bee0d9ad9_temperature"
+        );
         assert_eq!(parsed["device_class"], "temperature");
         assert_eq!(parsed["unit_of_measurement"], "°C");
         assert_eq!(
@@ -361,5 +383,47 @@ mod tests {
         assert_eq!(parsed["availability_topic"], "iopool2mqtt/bridge/state");
         assert_eq!(parsed["device"]["name"], "iopool Piscine");
         assert_eq!(parsed["device"]["serial_number"], "0C6rTwUH");
+    }
+
+    #[test]
+    fn test_build_ha_discovery_messages_with_pool_title_enabled() {
+        let raw = r#"{
+            "id": "cfd5a936-e8e6-4ad3-b985-512bee0d9ad9",
+            "title": "Piscine",
+            "latestMeasure": {
+                "temperature": 24.5,
+                "ph": 7.2,
+                "orp": 680,
+                "mode": "gateway",
+                "isValid": true,
+                "ecoId": "0C6rTwUH",
+                "gatewayCode": "I20-98cdaceb5d60",
+                "measuredAt": "2026-10-23T09:08:00.000Z"
+            },
+            "mode": "STANDARD",
+            "hasAnActionRequired": false,
+            "advice": { "filtrationDuration": 4 }
+        }"#;
+        let pool: Pool = serde_json::from_str(raw).unwrap();
+        let msgs =
+            build_ha_discovery_messages(&pool, "iopool2mqtt", "homeassistant", true).unwrap();
+
+        let temp_msg = msgs
+            .iter()
+            .find(|m| m.topic.ends_with("_temperature/config"))
+            .unwrap();
+        assert_eq!(
+            temp_msg.topic,
+            "homeassistant/sensor/iopool_Piscine_temperature/config"
+        );
+
+        let parsed: Value = serde_json::from_str(&temp_msg.payload).unwrap();
+        assert_eq!(parsed["name"], "Piscine Temperature");
+        assert_eq!(parsed["object_id"], "iopool_Piscine_temperature");
+        assert_eq!(
+            parsed["unique_id"],
+            "iopool_cfd5a936-e8e6-4ad3-b985-512bee0d9ad9_temperature"
+        );
+        assert_eq!(parsed["state_topic"], "iopool2mqtt/Piscine/state");
     }
 }

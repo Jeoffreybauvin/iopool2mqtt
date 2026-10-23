@@ -26,6 +26,7 @@ async fn main() -> Result<()> {
         mqtt_host = %config.mqtt_host,
         mqtt_port = config.mqtt_port,
         mqtt_base_topic = %config.mqtt_base_topic,
+        mqtt_use_pool_title = config.mqtt_use_pool_title,
         ha_discovery_enabled = config.ha_discovery_enabled,
         poll_interval_secs = config.poll_interval.as_secs(),
         run_once = config.run_once,

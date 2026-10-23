@@ -22,6 +22,8 @@ pub const DEFAULT_MQTT_PORT: u16 = 1883;
 pub const DEFAULT_MQTT_CLIENT_ID: &str = "iopool2mqtt";
 /// Default root MQTT topic prefix.
 pub const DEFAULT_MQTT_BASE_TOPIC: &str = "iopool2mqtt";
+/// Default flag for using pool `title` instead of `id` in MQTT topics and HA sensor names.
+pub const DEFAULT_MQTT_USE_POOL_TITLE: bool = false;
 /// Default MQTT QoS level (1 = AtLeastOnce).
 pub const DEFAULT_MQTT_QOS: u8 = 1;
 /// Default MQTT retain flag for published pool states and metrics.
@@ -60,6 +62,8 @@ pub struct Config {
     pub mqtt_client_id: String,
     /// Base MQTT topic prefix (without trailing slash), e.g. `iopool2mqtt`.
     pub mqtt_base_topic: String,
+    /// Whether to use the pool's `title` instead of its `id` in MQTT topic paths and Home Assistant sensor names.
+    pub mqtt_use_pool_title: bool,
     /// MQTT Quality of Service level (`0`, `1`, or `2`).
     pub mqtt_qos: QoS,
     /// Whether published pool messages should have the MQTT `retain` flag set.
@@ -92,6 +96,7 @@ impl fmt::Debug for Config {
             )
             .field("mqtt_client_id", &self.mqtt_client_id)
             .field("mqtt_base_topic", &self.mqtt_base_topic)
+            .field("mqtt_use_pool_title", &self.mqtt_use_pool_title)
             .field("mqtt_qos", &self.mqtt_qos)
             .field("mqtt_retain", &self.mqtt_retain)
             .field("mqtt_keep_alive", &self.mqtt_keep_alive)
@@ -194,6 +199,9 @@ impl Config {
             "MQTT_BASE_TOPIC",
         )?;
 
+        let mqtt_use_pool_title =
+            parse_bool(&lookup, "MQTT_USE_POOL_TITLE", DEFAULT_MQTT_USE_POOL_TITLE)?;
+
         let qos_raw = parse_u8(&lookup, "MQTT_QOS", DEFAULT_MQTT_QOS)?;
         let mqtt_qos = match qos_raw {
             0 => QoS::AtMostOnce,
@@ -254,6 +262,7 @@ impl Config {
             mqtt_password,
             mqtt_client_id,
             mqtt_base_topic,
+            mqtt_use_pool_title,
             mqtt_qos,
             mqtt_retain,
             mqtt_keep_alive: Duration::from_secs(keep_alive_secs),
@@ -370,6 +379,7 @@ mod tests {
         assert_eq!(cfg.mqtt_password, None);
         assert_eq!(cfg.mqtt_client_id, DEFAULT_MQTT_CLIENT_ID);
         assert_eq!(cfg.mqtt_base_topic, DEFAULT_MQTT_BASE_TOPIC);
+        assert!(!cfg.mqtt_use_pool_title);
         assert_eq!(cfg.mqtt_qos, QoS::AtLeastOnce);
         assert!(cfg.mqtt_retain);
         assert!(cfg.ha_discovery_enabled);
@@ -407,6 +417,7 @@ mod tests {
         env.insert("MQTT_PASSWORD", "mqtt_pass");
         env.insert("MQTT_CLIENT_ID", "custom_client");
         env.insert("MQTT_BASE_TOPIC", "/custom/iopool/");
+        env.insert("MQTT_USE_POOL_TITLE", "true");
         env.insert("MQTT_QOS", "2");
         env.insert("MQTT_RETAIN", "false");
         env.insert("MQTT_KEEP_ALIVE_SECS", "60");
@@ -425,6 +436,7 @@ mod tests {
         assert_eq!(cfg.mqtt_password.as_deref(), Some("mqtt_pass"));
         assert_eq!(cfg.mqtt_client_id, "custom_client");
         assert_eq!(cfg.mqtt_base_topic, "custom/iopool");
+        assert!(cfg.mqtt_use_pool_title);
         assert_eq!(cfg.mqtt_qos, QoS::ExactlyOnce);
         assert!(!cfg.mqtt_retain);
         assert_eq!(cfg.mqtt_keep_alive, Duration::from_secs(60));

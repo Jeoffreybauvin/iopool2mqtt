@@ -33,6 +33,37 @@ pub struct Pool {
     pub extra: BTreeMap<String, Value>,
 }
 
+impl Pool {
+    /// Returns the MQTT topic segment identifying this pool:
+    /// either `self.id` (when `use_pool_title` is `false`), or a sanitized version of `self.title`
+    /// (when `use_pool_title` is `true` and `self.title` is non-empty).
+    #[must_use]
+    pub fn topic_segment(&self, use_pool_title: bool) -> String {
+        if use_pool_title {
+            let sanitized = sanitize_topic_segment(&self.title);
+            if !sanitized.is_empty() {
+                return sanitized;
+            }
+        }
+        self.id.clone()
+    }
+}
+
+/// Sanitizes a human-readable string (such as `pool.title`) so it is safe to use as a single MQTT topic segment.
+#[must_use]
+pub fn sanitize_topic_segment(raw: &str) -> String {
+    raw.trim()
+        .chars()
+        .map(|c| {
+            if c == '/' || c == '+' || c == '#' || c == '\0' || c.is_whitespace() {
+                '_'
+            } else {
+                c
+            }
+        })
+        .collect()
+}
+
 /// Represents the latest water quality measurement from an iopool EcO sensor.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

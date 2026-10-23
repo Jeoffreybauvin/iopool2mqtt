@@ -60,8 +60,10 @@ pub fn build_pool_messages(
     pool: &Pool,
     base_topic: &str,
     retain: bool,
+    use_pool_title: bool,
 ) -> Result<Vec<MqttMessage>> {
-    let prefix = format!("{base_topic}/{}", pool.id);
+    let segment = pool.topic_segment(use_pool_title);
+    let prefix = format!("{base_topic}/{segment}");
     let mut messages = Vec::with_capacity(20);
 
     // 1. Full JSON state payload for the pool
@@ -483,7 +485,7 @@ mod tests {
         }"#;
 
         let pool: Pool = serde_json::from_str(raw).unwrap();
-        let messages = build_pool_messages(&pool, "iopool2mqtt", true).unwrap();
+        let messages = build_pool_messages(&pool, "iopool2mqtt", true, false).unwrap();
 
         let find = |suffix: &str| -> Option<&str> {
             let full = format!("iopool2mqtt/cfd5a936-e8e6-4ad3-b985-512bee0d9ad9/{suffix}");
@@ -514,5 +516,43 @@ mod tests {
             find("latestMeasure/measuredAt"),
             Some("2026-10-23T09:08:00.000Z")
         );
+    }
+
+    #[test]
+    fn test_build_pool_messages_uses_pool_title_when_enabled() {
+        let raw = r#"{
+            "id": "cfd5a936-e8e6-4ad3-b985-512bee0d9ad9",
+            "title": "Piscine",
+            "latestMeasure": {
+                "temperature": 22.5,
+                "ph": 7.4,
+                "orp": 710
+            },
+            "mode": "STANDARD",
+            "hasAnActionRequired": false,
+            "advice": {
+                "filtrationDuration": 4
+            },
+            "salt": null
+        }"#;
+
+        let pool: Pool = serde_json::from_str(raw).unwrap();
+        let messages = build_pool_messages(&pool, "iopool2mqtt", true, true).unwrap();
+
+        let find = |suffix: &str| -> Option<&str> {
+            let full = format!("iopool2mqtt/Piscine/{suffix}");
+            messages
+                .iter()
+                .find(|m| m.topic == full)
+                .map(|m| m.payload.as_str())
+        };
+
+        assert!(find("state").is_some());
+        assert_eq!(find("id"), Some("cfd5a936-e8e6-4ad3-b985-512bee0d9ad9"));
+        assert_eq!(find("title"), Some("Piscine"));
+        assert_eq!(find("latestMeasure/temperature"), Some("22.5"));
+        assert_eq!(find("latestMeasure/ph"), Some("7.4"));
+        assert_eq!(find("latestMeasure/orp"), Some("710"));
+        assert_eq!(find("advice/filtrationDuration"), Some("4"));
     }
 }

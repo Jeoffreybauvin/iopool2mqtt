@@ -22,6 +22,7 @@ services:
       # Override MQTT_HOST in Docker network to point to the NanoMQ service
       MQTT_HOST: ${MQTT_DOCKER_HOST:-nanomq}
       MQTT_PORT: ${MQTT_PORT:-1883}
+      MQTT_USE_POOL_TITLE: ${MQTT_USE_POOL_TITLE:-false}
       POLL_INTERVAL_SECS: ${POLL_INTERVAL_SECS:-300}
       RUN_ONCE: ${RUN_ONCE:-false}
       HA_DISCOVERY_ENABLED: ${HA_DISCOVERY_ENABLED:-true}
