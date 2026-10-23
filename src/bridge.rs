@@ -69,6 +69,7 @@ where
                     pool,
                     &self.config.mqtt_base_topic,
                     &self.config.ha_discovery_prefix,
+                    self.config.mqtt_use_pool_title,
                 )?;
                 info!(
                     pool_id = %pool.id,
@@ -80,8 +81,12 @@ where
                 self.discovered_pools.insert(pool.id.clone());
             }
 
-            let pool_msgs =
-                build_pool_messages(pool, &self.config.mqtt_base_topic, self.config.mqtt_retain)?;
+            let pool_msgs = build_pool_messages(
+                pool,
+                &self.config.mqtt_base_topic,
+                self.config.mqtt_retain,
+                self.config.mqtt_use_pool_title,
+            )?;
 
             info!(
                 pool_id = %pool.id,
@@ -247,5 +252,45 @@ mod tests {
         assert!(msgs.iter().any(
             |m| m.topic == "iopool2mqtt/pool-123/latestMeasure/temperature" && m.payload == "25.5"
         ));
+    }
+
+    #[tokio::test]
+    async fn test_bridge_run_once_with_pool_title_enabled() {
+        let mut env = HashMap::new();
+        env.insert("IOPOOL_API_KEY", "test-key");
+        env.insert("RUN_ONCE", "true");
+        env.insert("HA_DISCOVERY_ENABLED", "true");
+        env.insert("MQTT_USE_POOL_TITLE", "true");
+        let config = Config::from_map(&env).unwrap();
+
+        let api = FakeIopoolApi {
+            pools: vec![sample_pool()],
+        };
+        let publisher = RecordingPublisher::default();
+
+        let mut bridge = Bridge::new(config, api, publisher);
+        let (_tx, rx) = watch::channel(false);
+        bridge.run(rx).await.unwrap();
+
+        let msgs = bridge.mqtt.published.lock().unwrap();
+
+        // Pool title "Ma Piscine" is sanitized to "Ma_Piscine" in topic paths
+        assert!(msgs
+            .iter()
+            .any(|m| m.topic == "iopool2mqtt/Ma_Piscine/state"));
+        assert!(msgs.iter().any(
+            |m| m.topic == "iopool2mqtt/Ma_Piscine/latestMeasure/temperature"
+                && m.payload == "25.5"
+        ));
+        let ha_temp = msgs
+            .iter()
+            .find(|m| m.topic == "homeassistant/sensor/iopool_Ma_Piscine_temperature/config")
+            .unwrap();
+        assert!(ha_temp
+            .payload
+            .contains("\"name\":\"Ma Piscine Temperature\""));
+        assert!(ha_temp
+            .payload
+            .contains("\"state_topic\":\"iopool2mqtt/Ma_Piscine/state\""));
     }
 }

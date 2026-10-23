@@ -116,6 +116,7 @@ Toutes les options sont configurables par variables d'environnement (ou via le f
 | `MQTT_PASSWORD` | Non | *(vide)* | Mot de passe MQTT (optionnel). |
 | `MQTT_CLIENT_ID` | Non | `iopool2mqtt` | Identifiant client MQTT utilisé lors de la connexion. |
 | `MQTT_BASE_TOPIC` | Non | `iopool2mqtt` | Préfixe racine des topics MQTT publiés. |
+| `MQTT_USE_POOL_TITLE` | Non | `false` | Si `true`, utilise le nom de la piscine (`title`, ex: `Piscine`) au lieu de son UUID (`id`) dans les chemins de topics MQTT et dans les noms/`object_id` des capteurs Home Assistant. |
 | `MQTT_QOS` | Non | `1` | Niveau de QoS MQTT : `0` (*AtMostOnce*), `1` (*AtLeastOnce*), ou `2` (*ExactlyOnce*). |
 | `MQTT_RETAIN` | Non | `true` | Active le flag `retain` sur les états et métriques publiés (`true`/`false`). |
 | `MQTT_KEEP_ALIVE_SECS` | Non | `30` | Intervalle de keep-alive MQTT en secondes. |
@@ -129,7 +130,9 @@ Toutes les options sont configurables par variables d'environnement (ou via le f
 
 ## 📡 Structure des Topics MQTT publiés
 
-En supposant `MQTT_BASE_TOPIC=iopool2mqtt` et un bassin d'identifiant `<pool_id>` (ex: `cfd5a936-e8e6-4ad3-b985-512bee0d9ad9`) :
+En supposant `MQTT_BASE_TOPIC=iopool2mqtt` et un identifiant de bassin `<pool_key>` qui vaut :
+- soit l'UUID `<pool_id>` (ex: `cfd5a936-e8e6-4ad3-b985-512bee0d9ad9`) lorsque `MQTT_USE_POOL_TITLE=false` (par défaut),
+- soit le nom de la piscine `<title>` (ex: `Piscine`) lorsque `MQTT_USE_POOL_TITLE=true` :
 
 ### 1. Topics globaux
 

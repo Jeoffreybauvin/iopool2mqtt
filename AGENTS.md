@@ -99,7 +99,11 @@ Le projet suit les règles des skills locaux (`.agents/skills/rust-skills` et `.
 4. **Testabilité par injection de dépendances** :
    - `Bridge<A: IopoolApi, M: MqttPublisher>` dépend d'abstractions (traits), ce qui permet de tester toute la logique métier avec des mocks (`wiremock` ou implémentations en mémoire) sans dépendre d'Internet.
 5. **Arrêt gracieux (`RumqttcPublisher`)** :
-   - `RumqttcPublisher::disconnect` publie `offline` sur `<base_topic>/bridge/state`, appelle `client.disconnect().await`, puis attend la fin de la tâche `EventLoop` (qui s'arrête sur `ConnectionError::RequestsDone` une fois tous les paquets en attente envoyés au broker). Cela garantit qu'en mode `RUN_ONCE=true`, aucun message n'est perdu avant la fermeture du processus.
+   - `RumqttcPublisher::disconnect` publie `offline` sur `<base_topic>/bridge/state` (en mode daemon), attend l'acquittement (`PUBACK`/`PUBCOMP`) de tous les messages en cours, appelle `client.disconnect().await`, puis attend la fin de la tâche `EventLoop`. Cela garantit qu'en mode `RUN_ONCE=true`, aucun message n'est perdu avant la fermeture du processus.
+6. **Workflow Git & Branches (Obligatoire)** :
+   - La branche principale est **`master`**.
+   - Dès que l'utilisateur demande le développement d'une **nouvelle fonctionnalité** ou d'un **correctif de bug**, **créer systématiquement une nouvelle branche Git dédiée** avant de commiter (`git checkout -b feat/<nom>` ou `git checkout -b fix/<nom>`).
+   - Utiliser le format **Conventional Commits** (`feat: ...`, `fix: ...`, `sec: ...`, `perf: ...`, `refactor: ...`, `docs: ...`, `chore: ...`) afin d'alimenter automatiquement le calcul de version SemVer et `git-cliff` lors du merge de la Pull Request sur `master`.
 
 ---
 
