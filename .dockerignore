@@ -2,6 +2,8 @@ target/
 debug/
 .git/
 .github/
+.agents/
+.agent/
 .env
 *.pdb
 **/*.rs.bk
