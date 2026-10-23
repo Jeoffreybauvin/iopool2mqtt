@@ -2,7 +2,7 @@
 
 use std::collections::HashSet;
 
-use tokio_util::sync::CancellationToken;
+use tokio::sync::watch;
 use tracing::{error, info, instrument, warn};
 
 use crate::config::Config;
@@ -98,7 +98,7 @@ where
         Ok(pools.len())
     }
 
-    /// Runs the bridge according to `config.run_once` and `config.poll_interval` until cancelled.
+    /// Runs the bridge according to `config.run_once` and `config.poll_interval` until a shutdown signal is received.
     ///
     /// In `run_once` mode, any error during the single cycle is propagated after disconnecting cleanly.
     /// In daemon mode, transient errors are logged and retried on the next polling tick.
@@ -106,7 +106,7 @@ where
     /// # Errors
     ///
     /// Returns an error if `run_once` is enabled and the single polling cycle fails, or if disconnecting fails.
-    pub async fn run(&mut self, cancel: CancellationToken) -> Result<()> {
+    pub async fn run(&mut self, mut shutdown_rx: watch::Receiver<bool>) -> Result<()> {
         if self.config.run_once {
             info!("Running in single-shot mode (RUN_ONCE=true)");
             let poll_res = self.poll_and_publish().await;
@@ -129,9 +129,11 @@ where
             }
 
             tokio::select! {
-                () = cancel.cancelled() => {
-                    info!("Shutdown signal received, disconnecting from MQTT broker");
-                    break;
+                _ = shutdown_rx.changed() => {
+                    if *shutdown_rx.borrow() {
+                        info!("Shutdown signal received, disconnecting from MQTT broker");
+                        break;
+                    }
                 }
                 () = tokio::time::sleep(self.config.poll_interval) => {}
             }
@@ -228,8 +230,8 @@ mod tests {
         let publisher = RecordingPublisher::default();
 
         let mut bridge = Bridge::new(config, api, publisher);
-        let cancel = CancellationToken::new();
-        bridge.run(cancel).await.unwrap();
+        let (_tx, rx) = watch::channel(false);
+        bridge.run(rx).await.unwrap();
 
         assert!(*bridge.mqtt.disconnected.lock().unwrap());
         let msgs = bridge.mqtt.published.lock().unwrap();

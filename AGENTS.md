@@ -36,7 +36,7 @@ iopool2mqtt/
 │   ├── iopool.rs           # Trait `IopoolApi` et client HTTP asynchrone `IopoolClient` (`reqwest` + `rustls`)
 │   ├── discovery.rs        # Générateur de payloads Home Assistant MQTT Auto-Discovery
 │   ├── mqtt.rs             # Trait `MqttPublisher`, `RumqttcPublisher` et construction des topics par piscine
-│   └── bridge.rs           # Orchestrateur `Bridge<A, M>` (mode daemon avec `CancellationToken` ou `run_once`)
+│   └── bridge.rs           # Orchestrateur `Bridge<A, M>` (mode daemon avec `tokio::sync::watch` ou `run_once`)
 └── tests/
     └── integration_test.rs # Tests d'intégration de bout en bout (wiremock + publisher mémoire & broker MQTT live)
 ```
@@ -86,8 +86,7 @@ Le projet suit les règles des skills locaux (`.agents/skills/rust-skills` et `.
 
 1. **Sécurité & Zéro `unsafe`** : `#![forbid(unsafe_code)]` est activé dans `Cargo.toml`.
 2. **Gestion des erreurs** :
-   - Bibliothèque (`src/*.rs`) : utiliser `crate::error::{Error, Result}` basé sur `thiserror`.
-   - Binaire (`src/main.rs`) : utiliser `anyhow::Result` avec `.context(...)`.
+   - Bibliothèque et binaire (`src/*.rs`) : utiliser `crate::error::{Error, Result}` basé sur `thiserror`.
    - Aucun `.unwrap()` ou `.expect()` dans le code de production (seulement autorisé dans les modules `#[cfg(test)]`).
 3. **Observabilité & Secrets** :
    - Utiliser `tracing` (`info!`, `warn!`, `error!`, `debug!`, `#[instrument]`) avec des champs structurés.

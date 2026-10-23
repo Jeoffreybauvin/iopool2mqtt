@@ -1,14 +1,13 @@
 //! Binary entrypoint for `iopool2mqtt`.
 
-use anyhow::Context;
-use tokio_util::sync::CancellationToken;
+use tokio::sync::watch;
 use tracing::info;
 use tracing_subscriber::EnvFilter;
 
-use iopool2mqtt::{Bridge, Config, IopoolClient, RumqttcPublisher};
+use iopool2mqtt::{Bridge, Config, IopoolClient, Result, RumqttcPublisher};
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn main() -> Result<()> {
     // Load .env early so RUST_LOG from .env can take effect if not already set in the environment
     let _ = dotenvy::dotenv();
 
@@ -20,7 +19,7 @@ async fn main() -> anyhow::Result<()> {
         .with_target(false)
         .init();
 
-    let config = Config::from_env().context("failed to load iopool2mqtt configuration")?;
+    let config = Config::from_env()?;
     info!(
         version = env!("CARGO_PKG_VERSION"),
         api_url = %config.iopool_api_url,
@@ -33,25 +32,18 @@ async fn main() -> anyhow::Result<()> {
         "Starting iopool2mqtt"
     );
 
-    let api_client =
-        IopoolClient::from_config(&config).context("failed to initialize iopool HTTP client")?;
-    let mqtt_publisher = RumqttcPublisher::connect(&config)
-        .await
-        .context("failed to initialize MQTT publisher")?;
+    let api_client = IopoolClient::from_config(&config)?;
+    let mqtt_publisher = RumqttcPublisher::connect(&config).await?;
 
-    let cancel = CancellationToken::new();
-    let cancel_for_signals = cancel.clone();
+    let (shutdown_tx, shutdown_rx) = watch::channel(false);
 
     tokio::spawn(async move {
         shutdown_signal().await;
-        cancel_for_signals.cancel();
+        let _ = shutdown_tx.send(true);
     });
 
     let mut bridge = Bridge::new(config, api_client, mqtt_publisher);
-    bridge
-        .run(cancel)
-        .await
-        .context("iopool2mqtt bridge exited with an error")?;
+    bridge.run(shutdown_rx).await?;
 
     info!("iopool2mqtt stopped cleanly");
     Ok(())

@@ -6,12 +6,6 @@ services:
     ports:
       - "1883:1883"
       - "8083:8083"
-    healthcheck:
-      test: ["CMD", "nanomq_cli", "conn", "-h", "127.0.0.1", "-p", "1883"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-      start_period: 2s
 
   iopool2mqtt:
     build:
@@ -21,8 +15,7 @@ services:
     container_name: iopool2mqtt
     restart: unless-stopped
     depends_on:
-      nanomq:
-        condition: service_healthy
+      - nanomq
     env_file:
       - .env
     environment:

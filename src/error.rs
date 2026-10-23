@@ -15,13 +15,12 @@ pub enum Error {
     },
 
     /// Failure while constructing or parsing an endpoint URL.
-    #[error("invalid URL `{url}`: {source}")]
+    #[error("invalid URL `{url}`: {message}")]
     InvalidUrl {
         /// The raw URL string that failed to parse.
         url: String,
-        /// Underlying URL parse error.
-        #[source]
-        source: url::ParseError,
+        /// Explanation of the URL parse error.
+        message: String,
     },
 
     /// HTTP transport or request failure when calling the iopool API.

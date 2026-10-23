@@ -10,7 +10,7 @@ use iopool2mqtt::{
     Bridge, Config, IopoolClient, MqttMessage, MqttPublisher, Result, RumqttcPublisher,
 };
 use rumqttc::{AsyncClient, Event, MqttOptions, Packet, QoS};
-use tokio_util::sync::CancellationToken;
+use tokio::sync::watch;
 use wiremock::matchers::{header, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -81,7 +81,8 @@ async fn test_end_to_end_wiremock_to_mqtt_topics() {
     let recorded = Arc::clone(&publisher.messages);
 
     let mut bridge = Bridge::new(config, api_client, publisher);
-    bridge.run(CancellationToken::new()).await.unwrap();
+    let (_tx, rx) = watch::channel(false);
+    bridge.run(rx).await.unwrap();
 
     let published = recorded.lock().unwrap().clone();
     let by_topic: HashMap<String, String> = published
@@ -175,7 +176,8 @@ async fn test_end_to_end_live_mqtt_broker_if_configured() {
     let publisher = RumqttcPublisher::connect(&config).await.unwrap();
 
     let mut bridge = Bridge::new(config, api_client, publisher);
-    bridge.run(CancellationToken::new()).await.unwrap();
+    let (_tx, rx) = watch::channel(false);
+    bridge.run(rx).await.unwrap();
 
     // Collect published messages from subscriber
     let mut received = HashMap::new();

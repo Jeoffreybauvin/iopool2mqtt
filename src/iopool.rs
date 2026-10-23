@@ -68,9 +68,9 @@ impl IopoolClient {
         timeout: std::time::Duration,
     ) -> Result<Self> {
         let base_url = base_url.into().trim_end_matches('/').to_owned();
-        url::Url::parse(&base_url).map_err(|source| Error::InvalidUrl {
+        reqwest::Url::parse(&base_url).map_err(|err| Error::InvalidUrl {
             url: base_url.clone(),
-            source,
+            message: err.to_string(),
         })?;
 
         let mut default_headers = HeaderMap::new();

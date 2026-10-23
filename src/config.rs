@@ -144,9 +144,9 @@ impl Config {
             .to_owned();
 
         // Validate that the base URL parses cleanly
-        url::Url::parse(&iopool_api_url).map_err(|source| Error::InvalidUrl {
+        reqwest::Url::parse(&iopool_api_url).map_err(|err| Error::InvalidUrl {
             url: iopool_api_url.clone(),
-            source,
+            message: err.to_string(),
         })?;
 
         let iopool_pool_ids = lookup_non_empty(&lookup, "IOPOOL_POOL_IDS")
