@@ -6,9 +6,13 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 
 ## [0.1.0] - 2026-10-23
 
-### 🚀 Nouvelles fonctionnalités
-- Pont Rust asynchrone (`tokio`, `reqwest`, `rumqttc`) entre l'API publique iopool (`/v1/pools`, `/v1/pool/{id}`) et MQTT.
-- Double publication MQTT : état JSON complet (`<base>/<pool_id>/state`) et sous-topics unitaires (`latestMeasure/*`, `advice/*`, etc.).
-- Support natif de la découverte automatique **Home Assistant (MQTT Auto-Discovery)**.
-- Mode daemon périodique (`POLL_INTERVAL_SECS`) et mode exécution unique (`RUN_ONCE=true`).
-- Conteneurisation Docker multi-stage non-root et stack `docker-compose.yml` avec NanoMQ.
+### 📦 Autres changements
+
+- Initial commit ([`9594a37`](https://github.com/Jeoffreybauvin/iopool2mqtt/commit/9594a37cb50122947e5faa8ee830a8395efb439b))
+- Initial release ([`f0677e8`](https://github.com/Jeoffreybauvin/iopool2mqtt/commit/f0677e8107d35901ada6c83aea953acabc8d2b78))
+- Fix CI ([`be24abe`](https://github.com/Jeoffreybauvin/iopool2mqtt/commit/be24abe517dbdf28412e541f6ef53f5f981aaaa4))
+- Fix CI ([`04d962b`](https://github.com/Jeoffreybauvin/iopool2mqtt/commit/04d962b7b882ab0f9e4644a6f1582090da268e38))
+- Lighter libs ([`fe34539`](https://github.com/Jeoffreybauvin/iopool2mqtt/commit/fe3453977d121488df4dfb60db2a4a8218df8df7))
+- Git worfklow ([`f6f38ad`](https://github.com/Jeoffreybauvin/iopool2mqtt/commit/f6f38ad745583ce531804641dda7da608de063c4))
+
+
