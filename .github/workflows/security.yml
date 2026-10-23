@@ -1,13 +1,14 @@
 name: Security Scans
 
 on:
-  push:
-    branches: ["main", "master", "develop"]
   pull_request:
     branches: ["main", "master", "develop"]
+  push:
+    branches: ["develop", "feat/**", "fix/**", "chore/**", "refactor/**"]
   schedule:
     # Run every Monday at 06:00 UTC to detect newly published CVEs
     - cron: "0 6 * * 1"
+  workflow_call:
   workflow_dispatch:
 
 permissions:

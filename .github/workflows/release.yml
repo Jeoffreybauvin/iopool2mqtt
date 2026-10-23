@@ -1,0 +1,198 @@
+name: Release & Publish Docker Image
+
+on:
+  push:
+    branches: ["master"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version à publier (ex: 0.2.0). Laisser vide pour détermination automatique."
+        required: false
+        type: string
+
+env:
+  DOCKERHUB_IMAGE: jeoffrey54/iopool2mqtt
+
+jobs:
+  ci:
+    name: CI Pipeline
+    if: "!startsWith(github.event.head_commit.message, 'chore(release):')"
+    uses: ./.github/workflows/ci.yml
+
+  security:
+    name: Security Scans
+    if: "!startsWith(github.event.head_commit.message, 'chore(release):')"
+    uses: ./.github/workflows/security.yml
+    permissions:
+      contents: read
+      security-events: write
+
+  release:
+    name: Create GitHub Release & Changelog
+    if: "!startsWith(github.event.head_commit.message, 'chore(release):')"
+    needs: [ci, security]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      version: ${{ steps.semver.outputs.version }}
+      tag: ${{ steps.semver.outputs.tag }}
+    steps:
+      - name: Checkout repository (full history & tags)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Determine release version
+        id: semver
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+
+          CARGO_VERSION=$(grep -m1 '^version = ' Cargo.toml | sed -E 's/version = "([^"]+)"/\1/')
+          echo "Current Cargo.toml version: ${CARGO_VERSION}"
+
+          if [ -n "${INPUT_VERSION}" ]; then
+            NEXT_VERSION="${INPUT_VERSION#v}"
+            echo "Using manually specified version: ${NEXT_VERSION}"
+          elif ! git rev-parse "v${CARGO_VERSION}" >/dev/null 2>&1; then
+            NEXT_VERSION="${CARGO_VERSION}"
+            echo "Tag v${CARGO_VERSION} does not exist yet; releasing version from Cargo.toml: ${NEXT_VERSION}"
+          else
+            LAST_TAG="v${CARGO_VERSION}"
+            IFS='.' read -r MAJOR MINOR PATCH <<< "${CARGO_VERSION}"
+            COMMITS=$(git log "${LAST_TAG}..HEAD" --pretty=format:"%s%n%b")
+
+            if echo "${COMMITS}" | grep -qE '(BREAKING CHANGE|^[a-z]+(\([^)]+\))?!:)'; then
+              MAJOR=$((MAJOR + 1))
+              MINOR=0
+              PATCH=0
+            elif echo "${COMMITS}" | grep -qE '^feat(\([^)]+\))?:'; then
+              MINOR=$((MINOR + 1))
+              PATCH=0
+            else
+              PATCH=$((PATCH + 1))
+            fi
+
+            NEXT_VERSION="${MAJOR}.${MINOR}.${PATCH}"
+            echo "Auto-bumping version from ${CARGO_VERSION} to ${NEXT_VERSION}"
+          fi
+
+          if [ "${NEXT_VERSION}" != "${CARGO_VERSION}" ]; then
+            sed -i -E "0,/^version = \"[^\"]+\"/s//version = \"${NEXT_VERSION}\"/" Cargo.toml
+            if [ -f Cargo.lock ]; then
+              python3 -c 'import pathlib,re,sys; p=pathlib.Path("Cargo.lock"); p.write_text(re.sub(r"(name = \"iopool2mqtt\"\nversion = \")[^\"]+(\")", rf"\g<1>{sys.argv[1]}\2", p.read_text(), count=1))' "${NEXT_VERSION}"
+            fi
+          fi
+
+          echo "version=${NEXT_VERSION}" >> "${GITHUB_OUTPUT}"
+          echo "tag=v${NEXT_VERSION}" >> "${GITHUB_OUTPUT}"
+
+      - name: Generate Release Notes (git-cliff)
+        id: git-cliff-notes
+        uses: orhun/git-cliff-action@v4
+        with:
+          config: cliff.toml
+          args: --unreleased --tag ${{ steps.semver.outputs.tag }} --strip all
+        env:
+          OUTPUT: RELEASE_NOTES.md
+
+      - name: Update full CHANGELOG.md (git-cliff)
+        uses: orhun/git-cliff-action@v4
+        with:
+          config: cliff.toml
+          args: --tag ${{ steps.semver.outputs.tag }} -o CHANGELOG.md
+
+      - name: Commit version bump & CHANGELOG.md and push Git tag
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add Cargo.toml Cargo.lock CHANGELOG.md
+          if ! git diff --cached --quiet; then
+            git commit -m "chore(release): ${{ steps.semver.outputs.tag }} [skip ci]"
+            git push origin "HEAD:${GITHUB_REF_NAME}"
+          fi
+
+          git tag -a "${{ steps.semver.outputs.tag }}" -m "Release ${{ steps.semver.outputs.tag }}"
+          git push origin "${{ steps.semver.outputs.tag }}"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.semver.outputs.tag }}
+          name: "iopool2mqtt ${{ steps.semver.outputs.tag }}"
+          body_path: RELEASE_NOTES.md
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  docker-publish:
+    name: Build & Push to Docker Hub (jeoffrey54/iopool2mqtt)
+    needs: [release]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout released tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release.outputs.tag }}
+
+      - name: Set up QEMU (multi-arch support)
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Verify Docker Hub secret is configured
+        env:
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          if [ -z "${DOCKERHUB_TOKEN}" ]; then
+            echo "::error::Le secret GitHub DOCKERHUB_TOKEN n'est pas configuré (Settings -> Secrets and variables -> Actions)."
+            exit 1
+          fi
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME || 'jeoffrey54' }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Extract Docker metadata (tags & OCI labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.DOCKERHUB_IMAGE }}
+          tags: |
+            type=semver,pattern={{version}},value=${{ needs.release.outputs.version }}
+            type=semver,pattern=v{{version}},value=${{ needs.release.outputs.version }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ needs.release.outputs.version }}
+            type=semver,pattern={{major}},value=${{ needs.release.outputs.version }},enable=${{ !startsWith(needs.release.outputs.version, '0.') }}
+            type=raw,value=latest
+            type=sha,prefix=sha-
+
+      - name: Build and push Docker image (linux/amd64, linux/arm64)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Update Docker Hub repository description from README.md
+        uses: peter-evans/dockerhub-description@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME || 'jeoffrey54' }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          repository: ${{ env.DOCKERHUB_IMAGE }}
+          readme-filepath: ./README.md

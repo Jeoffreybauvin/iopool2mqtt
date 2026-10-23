@@ -20,13 +20,18 @@ iopool2mqtt/
 ├── .env.example            # Modèle de fichier .env documenté et versionné
 ├── Cargo.toml              # Manifeste Rust, dépendances et configuration stricte des lints Clippy
 ├── deny.toml               # Configuration cargo-deny (audit licences et sécurité supply-chain)
+├── cliff.toml              # Configuration git-cliff pour la génération automatique de CHANGELOG.md
+├── CHANGELOG.md            # Historique des versions (Keep a Changelog / SemVer)
 ├── Dockerfile              # Build multi-stage (rust:1-bookworm -> debian:bookworm-slim non-root)
-├── docker-compose.yml      # Stack locale : emqx/nanomq:latest + iopool2mqtt
+├── docker-compose.yml      # Stack locale : emqx/nanomq:latest + jeoffrey54/iopool2mqtt
 ├── README.md               # Documentation utilisateur et opérateur complète
 ├── AGENTS.md               # Ce fichier de référence pour les agents IA
-├── .github/workflows/
-│   ├── ci.yml              # Pipeline CI : rustfmt, clippy, rustdoc, cargo test (+ NanoMQ), docker build
-│   └── security.yml        # Pipeline Sécurité : cargo-audit, cargo-deny, Trivy FS/Secrets & Image scan
+├── .github/
+│   ├── PULL_REQUEST_template.md # Modèle de PR (Conventional Commits & checklist)
+│   └── workflows/
+│       ├── ci.yml          # Pipeline CI réutilisable : rustfmt, clippy, rustdoc, cargo test (+ NanoMQ), docker build
+│       ├── security.yml    # Pipeline Sécurité réutilisable : cargo-audit, cargo-deny, Trivy FS/Secrets & Image scan
+│       └── release.yml     # Pipeline Release sur merge `master` : CI + Security -> SemVer + git-cliff -> GitHub Release -> Push Docker Hub (jeoffrey54/iopool2mqtt)
 ├── src/
 │   ├── main.rs             # Point d'entrée binaire minimal (dotenvy, tracing, signaux OS, lancement Bridge)
 │   ├── lib.rs              # Racine de la bibliothèque et ré-exports publics

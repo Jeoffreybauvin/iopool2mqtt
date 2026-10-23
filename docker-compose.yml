@@ -11,7 +11,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: iopool2mqtt:latest
+    image: jeoffrey54/iopool2mqtt:latest
     container_name: iopool2mqtt
     restart: unless-stopped
     depends_on:

@@ -1,7 +1,9 @@
 # iopool2mqtt
 
-[![CI](https://github.com/iopool2mqtt/iopool2mqtt/actions/workflows/ci.yml/badge.svg)](.github/workflows/ci.yml)
-[![Security Scans](https://github.com/iopool2mqtt/iopool2mqtt/actions/workflows/security.yml/badge.svg)](.github/workflows/security.yml)
+[![CI](https://github.com/Jeoffreybauvin/iopool2mqtt/actions/workflows/ci.yml/badge.svg)](https://github.com/Jeoffreybauvin/iopool2mqtt/actions/workflows/ci.yml)
+[![Security Scans](https://github.com/Jeoffreybauvin/iopool2mqtt/actions/workflows/security.yml/badge.svg)](https://github.com/Jeoffreybauvin/iopool2mqtt/actions/workflows/security.yml)
+[![Release & Publish Docker Image](https://github.com/Jeoffreybauvin/iopool2mqtt/actions/workflows/release.yml/badge.svg)](https://github.com/Jeoffreybauvin/iopool2mqtt/actions/workflows/release.yml)
+[![Docker Hub](https://img.shields.io/docker/v/jeoffrey54/iopool2mqtt?sort=semver&label=Docker%20Hub)](https://hub.docker.com/r/jeoffrey54/iopool2mqtt)
 
 **`iopool2mqtt`** est un pont léger, rapide et sécurisé écrit en **Rust** permettant d'interroger l'[API publique iopool](https://help.iopool.com/fr/articles/5537423-api-publique-iopool) pour une ou plusieurs piscines/spas (sonde connectée **EcO**) et de publier l'ensemble des mesures et recommandations vers un broker **MQTT**, avec support natif de la **découverte automatique Home Assistant (MQTT Auto-Discovery)**.
 
@@ -51,7 +53,22 @@ cp .env.example .env
 
 > **Note** : Toutes les variables présentes dans `.env` peuvent être surchargées à l'exécution via des variables d'environnement système (`docker run -e ...` ou section `environment:` de `docker-compose.yml`).
 
-### 2. Lancement avec Docker Compose (inclut NanoMQ)
+### 2. Lancement direct depuis Docker Hub (`jeoffrey54/iopool2mqtt`)
+
+L'image officielle multi-architecture (`linux/amd64`, `linux/arm64`) est publiée sur Docker Hub sous **`jeoffrey54/iopool2mqtt`** :
+
+```bash
+docker run -d \
+  --name iopool2mqtt \
+  --restart unless-stopped \
+  -e IOPOOL_API_KEY="votre_cle_api_iopool" \
+  -e MQTT_HOST="192.168.1.10" \
+  -e MQTT_PORT="1883" \
+  -e HA_DISCOVERY_ENABLED="true" \
+  jeoffrey54/iopool2mqtt:latest
+```
+
+### 3. Lancement avec Docker Compose (inclut NanoMQ)
 
 Un fichier [`docker-compose.yml`](docker-compose.yml) prêt à l'emploi démarre un broker MQTT **NanoMQ** (`emqx/nanomq:latest`) ainsi que **`iopool2mqtt`** :
 
@@ -69,7 +86,7 @@ Pour tester en mode **exécution unique** (`RUN_ONCE=true`) :
 RUN_ONCE=true docker compose up --build
 ```
 
-### 3. Observer les messages MQTT publiés via NanoMQ
+### 4. Observer les messages MQTT publiés via NanoMQ
 
 Vous pouvez souscrire à l'ensemble des topics publiés directement via le client CLI intégré au conteneur `nanomq` :
 
@@ -191,18 +208,76 @@ curl -sS -H "x-api-key: $IOPOOL_API_KEY" https://api.iopool.com/v1/pools/
 
 ---
 
-## 🔒 CI/CD & Sécurité (GitHub Actions)
+## 🔒 CI/CD, Sécurité & Processus de Release (GitHub Actions $\rightarrow$ Docker Hub)
 
-Deux workflows GitHub Actions valident automatiquement chaque commit et Pull Request :
+Trois workflows GitHub Actions orchestrent la validation, la sécurité et la livraison continue :
 
-1. **[`.github/workflows/ci.yml`](.github/workflows/ci.yml)** :
+```mermaid
+flowchart LR
+    BRANCH["Branche de travail\n(feat/*, fix/*, chore/*)"]
+    PR["Pull Request\nvers master"]
+    CHECKS["1. CI (fmt, clippy, tests + NanoMQ)\n2. Security (cargo-audit, cargo-deny, Trivy)"]
+    MERGE["Merge PR sur master"]
+    REL["Calcul Version SemVer\n+ Génération CHANGELOG.md (git-cliff)\n+ Tag vX.Y.Z & GitHub Release"]
+    DH["Publication Docker Hub\njeoffrey54/iopool2mqtt\n(:X.Y.Z, :vX.Y.Z, :X.Y, :latest)\n(linux/amd64 + linux/arm64)"]
+
+    BRANCH --> PR --> CHECKS --> MERGE --> REL --> DH
+```
+
+### 1. Workflows
+
+1. **[`.github/workflows/ci.yml`](.github/workflows/ci.yml)** *(sur PR et branches de travail)* :
    - Vérification du formatage (`cargo fmt --check`).
    - Analyse statique stricte (`cargo clippy -- -D warnings`).
    - Génération de la documentation (`cargo doc`).
    - Tests unitaires, doctests et tests d'intégration de bout en bout avec un service broker **NanoMQ** (`emqx/nanomq:latest`).
    - Construction et smoke-test de l'image Docker multi-stage.
-2. **[`.github/workflows/security.yml`](.github/workflows/security.yml)** :
+2. **[`.github/workflows/security.yml`](.github/workflows/security.yml)** *(sur PR, branches de travail et tous les lundis à 06h00 UTC)* :
    - **`cargo-audit`** : Vérification des vulnérabilités connues dans les dépendances Rust (RustSec Advisory Database).
    - **`cargo-deny`** : Validation des licences open-source autorisées, des sources de crates et des avis de sécurité via [`deny.toml`](deny.toml).
    - **Trivy (Filesystem & Secret Scan)** : Détection de fuites de secrets, d'erreurs de configuration et de vulnérabilités.
    - **Trivy (Container Image Scan)** : Analyse de sécurité de l'image Docker finale (`CRITICAL`, `HIGH`).
+3. **[`.github/workflows/release.yml`](.github/workflows/release.yml)** *(au merge d'une PR sur `master` ou via `workflow_dispatch`)* :
+   - Ré-exécute intégralement **CI** et **Security Scans** avant toute publication.
+   - **Gestion de version (SemVer)** :
+     - Si `version = "X.Y.Z"` dans `Cargo.toml` a été modifiée manuellement dans la PR (et que le tag `vX.Y.Z` n'existe pas encore), utilise cette version.
+     - Sinon, calcule automatiquement la version suivante à partir des commits depuis le dernier tag :
+       - `feat!:` ou `BREAKING CHANGE` $\rightarrow$ **Majeure** (`X+1.0.0`)
+       - `feat:` $\rightarrow$ **Mineure** (`X.Y+1.0`)
+       - `fix:`, `sec:`, `perf:`, `refactor:`, `docs:`, `chore:` $\rightarrow$ **Patch** (`X.Y.Z+1`)
+   - **Changelog & GitHub Release** : Génère les notes de version avec **git-cliff** ([`cliff.toml`](cliff.toml)), met à jour [`CHANGELOG.md`](CHANGELOG.md), crée le tag Git `vX.Y.Z` et publie la **Release GitHub** officielle.
+   - **Publication Docker Hub** : Construit l'image multi-architecture (`linux/amd64,linux/arm64`) et la pousse sur **`jeoffrey54/iopool2mqtt`** avec les tags :
+     - `jeoffrey54/iopool2mqtt:X.Y.Z` (ex: `0.1.0`)
+     - `jeoffrey54/iopool2mqtt:vX.Y.Z` (ex: `v0.1.0`)
+     - `jeoffrey54/iopool2mqtt:X.Y` (ex: `0.1`)
+     - `jeoffrey54/iopool2mqtt:latest`
+     - `jeoffrey54/iopool2mqtt:sha-<commit>`
+   - Synchronise automatiquement le `README.md` comme description de la page Docker Hub `jeoffrey54/iopool2mqtt`.
+
+### 2. Configuration des Secrets GitHub requis pour Docker Hub
+
+Dans votre dépôt GitHub (**Settings $\rightarrow$ Secrets and variables $\rightarrow$ Actions**), ajoutez :
+
+| Secret GitHub | Obligatoire | Valeur |
+| :--- | :---: | :--- |
+| `DOCKERHUB_TOKEN` | **Oui** | Un *Personal Access Token (PAT)* Docker Hub (Read, Write, Delete) généré depuis [Account Settings $\rightarrow$ Security](https://app.docker.com/settings/personal-access-tokens). |
+| `DOCKERHUB_USERNAME` | Optionnel | `jeoffrey54` *(valeur utilisée par défaut si le secret n'est pas défini)*. |
+
+*(Vérifiez également dans **Settings $\rightarrow$ Actions $\rightarrow$ General $\rightarrow$ Workflow permissions** que l'option **"Read and write permissions"** est cochée pour permettre à `GITHUB_TOKEN` de créer les releases et tags Git.)*
+
+### 3. Cycle de travail avec branches et Pull Requests
+
+```bash
+# 1. Créer une branche pour votre évolution ou correctif
+git checkout -b feat/support-new-metric
+
+# 2. Développer et commiter en suivant Conventional Commits
+git add .
+git commit -m "feat: add support for new pool metric"
+git push -u origin feat/support-new-metric
+
+# 3. Ouvrir une Pull Request vers `master` sur GitHub
+# -> Les workflows CI et Security Scans s'exécutent automatiquement.
+# -> Une fois la PR mergée sur `master`, le workflow Release crée la release GitHub
+#    avec le changelog et publie l'image versionnée sur Docker Hub (jeoffrey54/iopool2mqtt).
+```
