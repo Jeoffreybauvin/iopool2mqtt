@@ -1,0 +1,82 @@
+name: Security Scans
+
+on:
+  push:
+    branches: ["main", "master", "develop"]
+  pull_request:
+    branches: ["main", "master", "develop"]
+  schedule:
+    # Run every Monday at 06:00 UTC to detect newly published CVEs
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  cargo-audit:
+    name: RustSec Advisory Audit (cargo-audit)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-audit
+        uses: taiki-e/install-action@cargo-audit
+
+      - name: Generate Lockfile if missing and run cargo audit
+        run: |
+          test -f Cargo.lock || cargo generate-lockfile
+          cargo audit
+
+  cargo-deny:
+    name: Supply Chain & License Audit (cargo-deny)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run cargo-deny
+        uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check advisories bans licenses sources
+
+  secret-scan:
+    name: Secret Leak Detection (Trivy Secret Scan)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run Trivy secret and config scan on repository
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: "fs"
+          scan-ref: "."
+          scanners: "vuln,secret,misconfig"
+          severity: "CRITICAL,HIGH"
+          exit-code: "1"
+
+  container-scan:
+    name: Container Image Vulnerability Scan (Trivy)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build Docker image for security scanning
+        run: docker build -t iopool2mqtt:sec-scan .
+
+      - name: Scan Docker image with Trivy
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: "iopool2mqtt:sec-scan"
+          format: "table"
+          exit-code: "1"
+          ignore-unfixed: true
+          vuln-type: "os,library"
+          severity: "CRITICAL,HIGH"

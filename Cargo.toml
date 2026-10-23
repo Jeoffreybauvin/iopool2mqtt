@@ -1,0 +1,57 @@
+[package]
+name = "iopool2mqtt"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.75"
+description = "Bridge between the iopool Public API and an MQTT broker with Home Assistant Auto-Discovery support"
+readme = "README.md"
+license = "MIT"
+keywords = ["iopool", "mqtt", "home-assistant", "pool", "iot"]
+categories = ["command-line-utilities", "network-programming"]
+
+[dependencies]
+anyhow = "1.0"
+dotenvy = "0.15"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+rumqttc = { version = "0.24", default-features = false, features = ["use-rustls"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "2.0"
+tokio = { version = "1.40", features = ["macros", "rt-multi-thread", "signal", "sync", "time"] }
+tokio-util = "0.7"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "json"] }
+url = "2.5"
+
+[dev-dependencies]
+tokio-test = "0.4"
+wiremock = "0.6"
+
+[lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+
+[lints.clippy]
+correctness = { level = "deny", priority = -1 }
+suspicious = { level = "warn", priority = -1 }
+style = { level = "warn", priority = -1 }
+complexity = { level = "warn", priority = -1 }
+perf = { level = "warn", priority = -1 }
+unwrap_used = "warn"
+expect_used = "warn"
+dbg_macro = "warn"
+todo = "warn"
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = true
+
+[profile.dev]
+opt-level = 0
+debug = true
+
+[profile.dev.package."*"]
+opt-level = 3

@@ -1,0 +1,7 @@
+target/
+debug/
+.git/
+.github/
+.env
+*.pdb
+**/*.rs.bk
