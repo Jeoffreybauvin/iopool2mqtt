@@ -26,6 +26,7 @@ RUN touch src/lib.rs src/main.rs && \
 FROM debian:bookworm-slim AS runtime
 
 RUN apt-get update && \
+    apt-get upgrade -y && \
     apt-get install -y --no-install-recommends ca-certificates && \
     rm -rf /var/lib/apt/lists/* && \
     useradd --system --uid 10001 --create-home --shell /usr/sbin/nologin iopool

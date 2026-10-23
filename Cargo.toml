@@ -13,7 +13,7 @@ categories = ["command-line-utilities", "network-programming"]
 anyhow = "1.0"
 dotenvy = "0.15"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
-rumqttc = { version = "0.24", default-features = false, features = ["use-rustls"] }
+rumqttc = { version = "0.24", default-features = false }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 thiserror = "2.0"
