@@ -1,6 +1,6 @@
 [package]
 name = "iopool2mqtt"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 rust-version = "1.75"
 description = "Bridge between the iopool Public API and an MQTT broker with Home Assistant Auto-Discovery support"

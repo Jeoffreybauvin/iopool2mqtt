@@ -4,6 +4,12 @@ Toutes les modifications notables de ce projet sont documentées dans ce fichier
 Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/),
 et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 
+## [0.1.1] - 2026-10-23
+
+### 📦 Autres changements
+
+- Add renovate.json ([`9535996`](https://github.com/Jeoffreybauvin/iopool2mqtt/commit/9535996582db776976c82ebb0cf7ce51260e2de7))
+
 ## [0.1.0] - 2026-10-23
 
 ### 📦 Autres changements
