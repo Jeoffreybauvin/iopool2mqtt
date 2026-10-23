@@ -4,6 +4,12 @@ Toutes les modifications notables de ce projet sont documentées dans ce fichier
 Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/),
 et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 
+## [0.1.2] - 2026-10-23
+
+### 📦 Autres changements
+
+- Update aquasecurity/trivy-action action to v0.36.0 ([`02d255c`](https://github.com/Jeoffreybauvin/iopool2mqtt/commit/02d255ce2ffd7828b7266631a18883da69385527))
+
 ## [0.1.1] - 2026-10-23
 
 ### 📦 Autres changements
